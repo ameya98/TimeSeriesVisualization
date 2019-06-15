@@ -1,5 +1,4 @@
 venv/
 .idea
 .DS_Store
-pip-selfcheck.json
-.Python
+*.pyc
