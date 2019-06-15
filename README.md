@@ -1,6 +1,6 @@
 # TimeSeriesVisualization
-Visualization of Time-Series with the Matrix Profile and Multidimensional Scaling.
+Visualization of Time-Series with the Matrix Profile and Multidimensional Scaling - a Python Implementation.
 
-Reference:
-Matrix Profile III: The Matrix Profile Allows Visualization of Salient Subsequences in Massive Time Series
-Chin-Chia Michael Yeh, Helga Van Herle, and Eamonn Keogh
+### References:
+<b>Matrix Profile III: The Matrix Profile Allows Visualization of Salient Subsequences in Massive Time Series</b>
+Chin-Chia Michael Yeh, Helga Van Herle, and Eamonn Keogh. IEEE ICDM 2016.
