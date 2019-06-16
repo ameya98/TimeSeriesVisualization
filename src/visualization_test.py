@@ -12,8 +12,8 @@ if __name__ == '__main__':
     piece3 = np.sin(np.arange(0, piece_length + size % 3))
     timeseries = np.hstack((piece1, piece2, piece3))[:size] + np.random.randn(size) * 0.2
 
-    # Get transformed timeseries, as well as indexes of the subsequences used.
-    timeseries_transformed, mds_indices = TimeSeriesVisualizer(timeseries, 10).transform()
+    # Get transformed time-series, as well as indexes of the subsequences used.
+    timeseries_transformed, mds_indices = TimeSeriesVisualizer(timeseries, 10).fit_transform()
 
     # This picks the right color for the points in the plots.
     def colorpicker(index):

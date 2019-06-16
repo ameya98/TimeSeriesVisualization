@@ -33,7 +33,7 @@ class MDL:
 
 class TimeSeriesVisualizer:
 
-    def __init__(self, sequence, subsequence_length, discretization_bits=6, candidates_per_round=10, std_noise=0.25):
+    def __init__(self, sequence, subsequence_length, discretization_bits=6, candidates_per_round=10, std_noise=0):
         self.sequence = sequence
         self.sequence_length = self.sequence.shape[0]
         self.subsequence_length = subsequence_length
@@ -137,9 +137,13 @@ class TimeSeriesVisualizer:
 
         return best_candidate, best_candidate_index, candidate_is_hypothesis
 
-    def select_subsequences(self):
+    # Computes the matrix profile with the STOMP method, returning the indices as well.
+    def get_matrix_profile(self):
+        return mp.stomp(self.sequence, self.subsequence_length, std_noise=self.std_noise)
 
-        # Re-initialize.
+    # Selects subsequences to be used for the MDS plot.
+    def select_subsequences(self):
+        # Re-initialize sets.
         self.compressible_set = set()
         self.hypothesis_set = set()
         self.unexplored_set = set(np.arange(self.sequence_length - self.subsequence_length + 1))
@@ -148,7 +152,7 @@ class TimeSeriesVisualizer:
         bit_cost_old = self.bit_cost()
 
         # Compute matrix profile with indices. Noise correction for the matrix profile has been implemented.
-        self.matrix_profile, self.matrix_profile_indices = mp.stomp(self.sequence, self.subsequence_length, std_noise=self.std_noise)
+        self.matrix_profile, self.matrix_profile_indices = self.get_matrix_profile()
 
         while True:
             # Get all the candidate subsequences.
@@ -188,8 +192,8 @@ class TimeSeriesVisualizer:
         # Return the union of the compressible set and the hypothesis set.
         return list(self.compressible_set.union(self.hypothesis_set))
 
-    # Returns the transformed sequence, as well as the subsequence indices!
-    def transform(self):
+    # Fits the embedding for the MDS, and returns the transformed sequence, along with the subsequence indices!
+    def fit_transform(self):
         embedding = MDS(n_components=2)
         subsequence_indices = self.select_subsequences()
         subsequences = [self.sequence[subsequence_index: subsequence_index + self.subsequence_length] for subsequence_index in subsequence_indices]
