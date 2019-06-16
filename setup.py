@@ -3,7 +3,7 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
     setuptools.setup(
-        name="TimeSeriesVisualization",
+        name="tsvisualize",
         version="1.0",
         author="Ameya Daigavane",
         author_email="ameya.d.98@gmail.com",

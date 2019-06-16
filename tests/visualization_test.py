@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from TimeSeriesVisualization import TimeSeriesVisualizer
+from tsvisualize import TimeSeriesVisualizer
 
 if __name__ == '__main__':
 
