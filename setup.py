@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
     setuptools.setup(
         name="tsvisualize",
-        version="1.0",
+        version="0.1",
         author="Ameya Daigavane",
         author_email="ameya.d.98@gmail.com",
         description="Time-series Visualization with the Matrix Profile and Multidimensional Scaling.",
