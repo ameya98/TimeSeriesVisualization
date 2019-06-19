@@ -32,7 +32,7 @@ class MDL:
         """
         subsequence_min = np.min(subsequence)
         subsequence_max = np.max(subsequence)
-        return np.round((subsequence - subsequence_min) / (subsequence_max - subsequence_min)).astype(int) * (2 ** num_bits - 1) + 1
+        return np.round(((subsequence - subsequence_min) / (subsequence_max - subsequence_min)) * (2 ** num_bits - 1)).astype(int) + 1
 
     @staticmethod
     def description_length(subsequence, num_bits):
@@ -65,8 +65,8 @@ class MDL:
 
 class TimeSeriesVisualizer:
 
-    def __init__(self, sequence, subsequence_length, discretization_bits=6, candidates_per_round=10, std_noise=0):
-        self.sequence = sequence
+    def __init__(self, sequence, subsequence_length, discretization_bits=6, candidates_per_round=10, std_noise=0, matrix_profile_run_time=10):
+        self.sequence = np.array(sequence)
         self.sequence_length = self.sequence.shape[0]
         self.subsequence_length = subsequence_length
 
@@ -83,6 +83,7 @@ class TimeSeriesVisualizer:
         self.matrix_profile = None
         self.matrix_profile_indices = None
         self.std_noise = std_noise
+        self.matrix_profile_run_time = matrix_profile_run_time
 
         # The three sets that will be used to construct the overall list of subsequences.
         self.compressible_set = []
@@ -116,6 +117,7 @@ class TimeSeriesVisualizer:
         candidates = []
         matrix_profile = np.copy(self.matrix_profile)
         for _ in range(num_candidates):
+
             # If no remaining values in the matrix profile, quit.
             if np.min(matrix_profile) == np.inf:
                 break
@@ -159,7 +161,7 @@ class TimeSeriesVisualizer:
             # Test as compressible.
             for hypothesis_index in self.hypothesis_set:
                 hypothesis = self.sequence[hypothesis_index]
-                bit_save = self.description_length(candidate) - MDL.reduced_description_length(candidate, hypothesis, self.num_bits)
+                bit_save = MDL.description_length(candidate, self.num_bits) - MDL.reduced_description_length(candidate, hypothesis, self.num_bits)
 
                 if bit_save > best_bit_save:
                     best_bit_save = bit_save
@@ -171,10 +173,11 @@ class TimeSeriesVisualizer:
 
     # Computes the matrix profile with the STOMP method, returning the indices as well.
     def get_matrix_profile(self):
-        return mp.stomp(self.sequence, self.subsequence_length, std_noise=self.std_noise)
+        return mp.scrimp_plus_plus(self.sequence, self.subsequence_length, step_size_fraction=0.25, std_noise=self.std_noise, runtime=self.matrix_profile_run_time, exclusion_zone_fraction=1)
 
     # Selects subsequences to be used for the MDS plot.
     def select_subsequences(self):
+
         # Re-initialize sets.
         self.compressible_set = set()
         self.hypothesis_set = set()
