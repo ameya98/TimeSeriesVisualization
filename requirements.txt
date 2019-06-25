@@ -1,0 +1,4 @@
+numpy>=1.16.4
+scikit-learn>=0.20.3
+git+https://github.com/ameya98/matrixprofile-ts@64c8a6cebbca61d201a740ffeb3974673c63b280
+matplotlib>=2.1.2
