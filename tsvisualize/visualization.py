@@ -1,8 +1,7 @@
 """
-Time-series Visualization with the Matrix Profile and Multidimensional Scaling.
+Time-series Visualization with the Matrix Profile.
 
 Author: Ameya Daigavane
-
 Reference:
 Matrix Profile III: The Matrix Profile Allows Visualization of Salient Subsequences in Massive Time Series
 Chin-Chia Michael Yeh, Helga Van Herle, and Eamonn Keogh
@@ -12,63 +11,23 @@ https://www.cs.ucr.edu/~eamonn/PID4481999_Matrix%20Profile_III.pdf
 from __future__ import division
 import numpy as np
 from matrixprofile import matrixProfile as mp
-from sklearn.manifold import MDS
-
-
-class MDL:
-    @staticmethod
-    def discretize(subsequence, num_bits):
-        """
-        :param subsequence: Subsequence to be discretized.
-        :param num_bits: Number of bits used to represent each bit of the discretized subsequence.
-        :return: Discretized subsequence.
-
-        >>> s1 = np.array([1, 3, 4, 5, 4, 3, 6, 15, 14, 13, 12, 0, 2, 4, 2, 6, 10, 11, 9, 3])
-        >>> '%s' % MDL.discretize(s1, num_bits=4) # doctest: +NORMALIZE_WHITESPACE
-        '[ 2 4 5 6 5 4 7 16 15 14 13 1 3 5 3 7 11 12 10 4]'
-        >>> s2 = np.array([1, 3, 4, 5, 3])
-        >>> '%s' % MDL.discretize(s2, num_bits=4) # doctest: +NORMALIZE_WHITESPACE
-        '[ 1 9 12 16 9]'
-        """
-        subsequence_min = np.min(subsequence)
-        subsequence_max = np.max(subsequence)
-        return np.round(((subsequence - subsequence_min) / (subsequence_max - subsequence_min)) * (2 ** num_bits - 1)).astype(int) + 1
-
-    @staticmethod
-    def description_length(subsequence, num_bits):
-        """
-        :param subsequence: Subsequence - can be thought of as a vector of elements each represented with some number of bits.
-        :param num_bits: Number of bits used to represent each element in this subsequence.
-        :return: The description length of the subsequence. This corresponds to the space required to store this sequence uncompressed.
-
-        >>> s1 = np.array([1, 3, 4, 5, 4, 3, 6, 15, 14, 13, 12, 0, 2, 4, 2, 6, 10, 11, 9, 3])
-        >>> '%0.2f' % MDL.description_length(s1, num_bits=4)
-        '80.00'
-        """
-        return subsequence.shape[0] * num_bits
-
-    @staticmethod
-    def reduced_description_length(compressible_sequence, hypothesis_sequence, num_bits):
-        """
-        :param compressible_sequence: The subsequence we want to compress by representing it with the hypothesis subsequence.
-        :param hypothesis_sequence: The subsequence we will use to compress the other sequence by noting dissimilarities.
-        :param num_bits: The number of bits used to store each element in the compressed format.
-        :return: The reduced description length of the subsequence. This corresponds to the space required to store the compressible sequence with the hypothesis sequence.
-
-        >>> s1 = np.array([1, 3, 4, 5, 4, 3, 6, 15, 14, 13, 12, 0, 2, 4, 2, 6, 10, 11, 9, 3])
-        >>> s2 = np.array([1, 3, 3, 5, 4, 3, 6, 15, 14, 13, 12, 0, 2, 3, 2, 6, 4, 3, 1, 0])
-        >>> '%0.2f' % MDL.reduced_description_length(s1, s2, num_bits=4)
-        '49.93'
-        """
-        return np.where((compressible_sequence != hypothesis_sequence))[0].size * (np.log2(compressible_sequence.shape[0]) + num_bits)
+from mdl import description_length, reduced_description_length
 
 
 class TimeSeriesVisualizer:
-
-    def __init__(self, sequence, subsequence_length, discretization_bits=6, candidates_per_round=10, std_noise=0, matrix_profile_run_time=10):
+    """
+    Constructs the matrix profile and optimizes for a MDL cost function when selecting subsequences for MDS.
+    """
+    def __init__(self, sequence, subsequence_length, discretization_bits=6, candidates_per_round=10, matrix_profile_noise=0, matrix_profile_run_time=None, method='pca'):
         self.sequence = np.array(sequence)
         self.sequence_length = self.sequence.shape[0]
         self.subsequence_length = subsequence_length
+        self.num_subsequences = self.sequence_length - self.subsequence_length + 1
+
+        # Visualization method.
+        if method not in ['pca', 'tsne', 'mds']:
+            raise ValueError('Visualization must be one of \'pca\', \'tsne\', \'mds\'.')
+        self.visualization_method = method
 
         # Number of bits used to discretize for MDL.
         self.num_bits = discretization_bits
@@ -76,69 +35,104 @@ class TimeSeriesVisualizer:
         # How many candidates to consider every round.
         self.candidates_per_round = candidates_per_round
 
-        # Compute the description length for individual subsequences.
-        self.subsequence_description_length = MDL.description_length(self.sequence[:subsequence_length], self.num_bits)
+        # The minimum and maximum of Z-normalized subsequences. Required for discretization.
+        self.subsequence_min = np.inf
+        self.subsequence_max = -np.inf
 
         # Matrix profile - to be evaluated and filled in later.
+        self.original_matrix_profile = None
+        self.original_matrix_profile_indices = None
         self.matrix_profile = None
         self.matrix_profile_indices = None
-        self.std_noise = std_noise
+        self.std_noise = matrix_profile_noise
         self.matrix_profile_run_time = matrix_profile_run_time
 
         # The three sets that will be used to construct the overall list of subsequences.
         self.compressible_set = []
         self.hypothesis_set = []
-        self.unexplored_set = set(np.arange(self.sequence_length - self.subsequence_length + 1))
+        self.unexplored_set = set(np.arange(self.num_subsequences))
+
+        self.actual_chosen = None
+
+    # Z-normalize a subsequence.
+    @staticmethod
+    def znormalize(subsequence):
+        """
+        :param subsequence: Subsequence of a time-series, as a numpy array.
+        :return: Z-normalized subsequence with zero mean and unit variance.
+        """
+        return (subsequence - np.mean(subsequence)) / np.std(subsequence)
+
+    # Get the znormalized version of a subsequence at index.
+    def get_znormalized_subsequence(self, index):
+        subsequence = self.sequence[index: index + self.subsequence_length]
+        return self.znormalize(subsequence)
+
+    # Discretize a subsequence, using a fixed number of bits.
+    def discretize(self, subsequence):
+        """
+        :param subsequence: Subsequence to be discretized, as a numpy array.
+        :return: Discretized subsequence, with each element represented by a number of bits.
+        """
+        return np.round(((self.znormalize(subsequence) - self.subsequence_min) / (self.subsequence_max - self.subsequence_min)) * (2 ** self.num_bits - 1)).astype(int) + 1
+
+    # Get discretized subsequence at index.
+    def get_discrete_subsequence(self, index):
+        return self.discretize(self.sequence[index: index + self.subsequence_length])
+
+    # Compute Z-normalized subsequence minimum and maximum, for discretization later.
+    def set_discretization_thresholds(self):
+        for index in range(self.num_subsequences):
+            subsequence = self.get_znormalized_subsequence(index)
+            self.subsequence_min = min(self.subsequence_min, np.min(subsequence))
+            self.subsequence_max = max(self.subsequence_max, np.max(subsequence))
 
     # Bit cost of the current state of the three sets.
     def bit_cost(self):
+        bit_cost = 0
 
         # Add compressed cost for compressible set.
-        bit_cost = 0
         for compressible_sequence_index in self.compressible_set:
-            compressible_sequence = self.sequence[compressible_sequence_index]
+            compressible_sequence = self.get_discrete_subsequence(compressible_sequence_index)
+
             min_rdl = np.inf
             for hypothesis_sequence_index in self.hypothesis_set:
-                hypothesis_sequence = self.sequence[hypothesis_sequence_index]
-                rdl = MDL.reduced_description_length(compressible_sequence, hypothesis_sequence, self.num_bits)
+                hypothesis_sequence = self.get_discrete_subsequence(hypothesis_sequence_index)
+                rdl = reduced_description_length(compressible_sequence, hypothesis_sequence, self.num_bits) + np.log2(len(self.hypothesis_set))
                 min_rdl = min(rdl, min_rdl)
 
             if min_rdl < np.inf:
                 bit_cost += min_rdl
 
         # Add uncompressed cost for hypothesis and unexplored sets.
-        bit_cost += len(self.hypothesis_set) * self.subsequence_description_length
-        bit_cost += len(self.unexplored_set) * self.subsequence_description_length
+        bit_cost += (len(self.hypothesis_set) + len(self.unexplored_set)) * description_length(self.get_discrete_subsequence(0), self.num_bits)
 
         return bit_cost
 
     # Gets the next list of candidates to consider.
     def get_candidates(self, num_candidates):
         candidates = []
-        matrix_profile = np.copy(self.matrix_profile)
         for _ in range(num_candidates):
 
             # If no remaining values in the matrix profile, quit.
-            if np.min(matrix_profile) == np.inf:
+            if np.min(self.matrix_profile) == np.inf:
                 break
 
             # Get the position and corresponding subsequence of the smallest value from the matrix profile.
-            candidate_index = np.argmin(matrix_profile)
-            candidate = self.sequence[candidate_index: candidate_index + self.subsequence_length]
+            candidate_index = np.argmin(self.matrix_profile)
 
-            # Discretize this.
-            candidate = MDL.discretize(candidate, self.num_bits)
+            # Discretize this, and add to candidates set.
+            candidate = self.get_discrete_subsequence(candidate_index)
             candidates.append((candidate, candidate_index))
 
             # Mask out trivial matches from the matrix profile.
-            mask_start = max(candidate_index - self.subsequence_length, 0)
-            mask_end = min(candidate_index + self.subsequence_length, matrix_profile.size)
-            for index in range(mask_start, mask_end):
-                matrix_profile[index] = np.inf
+            mask_start = max(candidate_index - self.subsequence_length + 1, 0)
+            mask_end = min(candidate_index + self.subsequence_length, self.matrix_profile.size)
+            self.matrix_profile[mask_start: mask_end] = np.inf
 
         return candidates
 
-    # Picks the best candidate according to the MDL criteria along with the type ('hypothesis'/'compressible') it belongs to.
+    # Picks the best candidate along with its type ('hypothesis'/'compressible') according to the MDL criteria.
     def best_candidate(self, candidates):
         best_bit_save = -np.inf
         best_candidate = None
