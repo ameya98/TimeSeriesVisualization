@@ -1,5 +1,5 @@
 """
-Recreating Visualization Experiments from the MIT-BIH Arrhythmia Dataset in Python.
+Visualization Experiments on the MIT-BIH Arrhythmia Dataset in Python.
 
 Reference:
 Matrix Profile III: The Matrix Profile Allows Visualization of Salient Subsequences in Massive Time Series
@@ -10,57 +10,100 @@ https://www.cs.ucr.edu/~eamonn/PID4481999_Matrix%20Profile_III.pdf
 import matplotlib.pyplot as plt
 import numpy as np
 from tsvisualize import TimeSeriesVisualizer
-import scipy.io
-from sklearn.manifold import MDS
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+np.random.seed(0)
+
+
+# Z-normalization to zero mean and unit variance.
+def znormalize(subsequence):
+    return (subsequence - np.mean(subsequence)) / np.std(subsequence)
 
 
 if __name__ == '__main__':
 
-    # Load time-series. This is from record 106 from the MIT-BIH Arrhythmia Dataset.
-    mat = scipy.io.loadmat('testdata/106.mat')
+    # Load record 106 from the MIT-BIH Arrhythmia Dataset.
+    record = np.load('testdata/heartbeat.npz')
 
-    # The actual time-series of the heartbeat.
-    timeseries = mat['data'].flatten()
+    # Load data and labelled indices.
+    timeseries = record['timeseries']
 
-    # Window size of the heartbeats.
-    windowsize = np.squeeze(mat['winSize']).astype(int)
+    labelled_indices = record['labelled_indices']
+    true_labels = record['true_labels']
+    matrix_profile = record['matrix_profile']
+    matrix_profile_indices = record['matrix_profile_indices']
+    subsequence_length = int(record['subsequence_length'])
 
-    # Recreate Figure 1, from the paper.
-    subsequence_indices = mat['coordIdx'].flatten()
-    labels = mat['coordLab'].flatten()
-    normal_heartbeats = mat['coord'][np.where(labels == 3)[0], :]
-    abnormal_heartbeats = mat['coord'][np.where(labels == 4)[0], :]
+    # Select Z-normalized subsequences. These are subsequences chosen and labelled by an expert.
+    subsequences = np.array([znormalize(timeseries[index: index + subsequence_length]) for index in labelled_indices])
 
-    plt.scatter(normal_heartbeats[:, 0], normal_heartbeats[:, 1], c='gold')
-    plt.scatter(abnormal_heartbeats[:, 0], abnormal_heartbeats[:, 1], c='darkblue')
-    plt.title('MDS Plot with Correctly Sampled Subsequences')
+    # Labels subsequences based on their proximity to the true labels.
+    def get_labels(indices):
+
+        def label(index):
+            if np.min(np.abs(labelled_indices - index)) < subsequence_length:
+                if true_labels[np.argmin(np.abs(labelled_indices - index))] == 2:
+                    return 0
+                else:
+                    return 1
+            else:
+                return -1
+
+        return np.array([label(index) for index in indices])
+
+    # Project down to 2D space, and plot.
+    projected_subsequences = PCA(n_components=2).fit_transform(subsequences)
+    labels = get_labels(labelled_indices)
+    plt.scatter(projected_subsequences[labels ==  0][:, 0], projected_subsequences[labels ==  0][:, 1], c='gold', label='Normal Heartbeat')
+    plt.scatter(projected_subsequences[labels ==  1][:, 0], projected_subsequences[labels ==  1][:, 1], c='darkblue', label='Abnormal Heartbeat')
+    plt.scatter(projected_subsequences[labels == -1][:, 0], projected_subsequences[labels == -1][:, 1], c='green', label='No Label')
+    plt.legend()
+    plt.title('PCA Plot with Expert-Extracted Subsequences')
     plt.show()
 
-    # Recreate Figure 2, from the paper.
-    num_points = labels.size
-    random_indices = np.random.permutation(timeseries.size - windowsize + 1)[:num_points]
-    random_subsequences = np.zeros((num_points, windowsize))
-    random_labels = np.zeros(num_points)
+    # Select random subsequences, same in number as for the previous plot.
+    num_points = len(true_labels)
+    random_indices = np.random.permutation(timeseries.size - subsequence_length + 1)[:num_points]
+    random_subsequences = np.array([znormalize(timeseries[index: index + subsequence_length]) for index in random_indices])
 
-    for actual_index, random_index in enumerate(random_indices):
-        # Get the subsequence.
-        random_subsequences[actual_index] = timeseries[random_index: random_index + windowsize]
-
-        # Standardize to zero mean and unit variance.
-        random_subsequences[actual_index] -= np.mean(random_subsequences[actual_index])
-        random_subsequences[actual_index] /= np.std(random_subsequences[actual_index])
-
-        # Get the label for this subsequence.
-        if np.any(np.abs(subsequence_indices - random_index) < 0.2 * windowsize):
-            random_labels[actual_index] = labels[np.argmin(np.abs(subsequence_indices - random_index))]
-
-    transformed_subsequences = MDS(n_components=2).fit_transform(random_subsequences)
-    normal_subsequences = transformed_subsequences[np.where(random_labels == 3)[0]]
-    abnormal_subsequences = transformed_subsequences[np.where(random_labels == 4)[0]]
-    overlap_subsequences = transformed_subsequences[np.where(random_labels == 0)[0]]
-
-    plt.scatter(normal_subsequences[:, 0], normal_subsequences[:, 1], c='gold')
-    plt.scatter(abnormal_subsequences[:, 0], abnormal_subsequences[:, 1], c='darkblue')
-    plt.scatter(overlap_subsequences[:, 0], overlap_subsequences[:, 1], c='green')
-    plt.title('MDS Plot with Randomly Sampled Subsequences')
+    # Project down to 2D space, and plot.
+    projected_random_subsequences = PCA(n_components=2).fit_transform(random_subsequences)
+    labels = get_labels(random_indices)
+    plt.scatter(projected_random_subsequences[labels ==  0][:, 0], projected_random_subsequences[labels ==  0][:, 1], c='gold', label='Normal Heartbeat')
+    plt.scatter(projected_random_subsequences[labels ==  1][:, 0], projected_random_subsequences[labels ==  1][:, 1], c='darkblue', label='Abnormal Heartbeat')
+    plt.scatter(projected_random_subsequences[labels == -1][:, 0], projected_random_subsequences[labels == -1][:, 1], c='green', label='No Label')
+    plt.legend()
+    plt.title('PCA Plot with Randomly Sampled Subsequences')
     plt.show()
+
+    # Select subsequences, chosen to minimize our MDL cost function!
+    tsv = TimeSeriesVisualizer(timeseries, subsequence_length, discretization_bits=8, candidates_per_round=5,
+                               matrix_profile_noise=0, matrix_profile_run_time=300)
+    normalized_subsequences, subsequence_indices = tsv.select_subsequences()
+
+    # Project down to 2D space, and plot.
+    projected_chosen_subsequences = PCA(n_components=2).fit_transform(normalized_subsequences)
+    labels = get_labels(subsequence_indices)
+    plt.scatter(projected_chosen_subsequences[labels ==  0][:, 0], projected_chosen_subsequences[labels ==  0][:, 1], c='gold', label='Normal Heartbeat')
+    plt.scatter(projected_chosen_subsequences[labels ==  1][:, 0], projected_chosen_subsequences[labels ==  1][:, 1], c='darkblue', label='Abnormal Heartbeat')
+    plt.scatter(projected_chosen_subsequences[labels == -1][:, 0], projected_chosen_subsequences[labels == -1][:, 1], c='green', label='No Label')
+    plt.legend()
+    plt.title('PCA Plot with Specifically Selected Subsequences')
+    plt.show()
+
+    # Select subsequences, but using a precomputed matrix profile.
+    tsv.original_matrix_profile = matrix_profile
+    tsv.original_matrix_profile_indices = matrix_profile_indices
+
+    normalized_subsequences, subsequence_indices = tsv.select_subsequences()
+
+    # Project down to 2D space, and plot.
+    projected_chosen_subsequences = PCA(n_components=2).fit_transform(normalized_subsequences)
+    labels = get_labels(subsequence_indices)
+    plt.scatter(projected_chosen_subsequences[labels ==  0][:, 0], projected_chosen_subsequences[labels ==  0][:, 1], c='gold', label='Normal Heartbeat')
+    plt.scatter(projected_chosen_subsequences[labels ==  1][:, 0], projected_chosen_subsequences[labels ==  1][:, 1], c='darkblue', label='Abnormal Heartbeat')
+    plt.scatter(projected_chosen_subsequences[labels == -1][:, 0], projected_chosen_subsequences[labels == -1][:, 1], c='green', label='No Label')
+    plt.legend()
+    plt.title('PCA Plot with Specifically Selected Subsequences \n (Precomputed Matrix Profile)')
+    plt.show()
+
