@@ -140,48 +140,56 @@ class TimeSeriesVisualizer:
 
         for candidate, candidate_index in candidates:
 
-            # Test as hypothesis.
-            nearest_neighbour_index = int(self.matrix_profile_indices[candidate_index])
-            nearest_neighbour = self.sequence[nearest_neighbour_index: nearest_neighbour_index + self.subsequence_length]
-            nearest_neighbour = MDL.discretize(nearest_neighbour, self.num_bits)
-            bit_save = MDL.description_length(nearest_neighbour, self.num_bits) - MDL.reduced_description_length(nearest_neighbour, candidate, self.num_bits)
+            # Test as hypothesis, by looking at nearest neighbour.
+            nearest_neighbour = self.get_discrete_subsequence(int(self.matrix_profile_indices[candidate_index]))
+            bit_save = description_length(nearest_neighbour, self.num_bits) - reduced_description_length(nearest_neighbour, candidate, self.num_bits)
 
             if bit_save > best_bit_save:
                 best_bit_save = bit_save
                 best_candidate = candidate
                 best_candidate_index = candidate_index
-                candidate_is_hypothesis = False
+                candidate_is_hypothesis = True
 
-            # Test as compressible.
+            # Test as compressible, by looking at hypotheses.
             for hypothesis_index in self.hypothesis_set:
-                hypothesis = self.sequence[hypothesis_index]
-                bit_save = MDL.description_length(candidate, self.num_bits) - MDL.reduced_description_length(candidate, hypothesis, self.num_bits)
+                hypothesis = self.get_discrete_subsequence(hypothesis_index)
+                bit_save = description_length(candidate, self.num_bits) - reduced_description_length(candidate, hypothesis, self.num_bits)
 
                 if bit_save > best_bit_save:
                     best_bit_save = bit_save
                     best_candidate = candidate
                     best_candidate_index = candidate_index
-                    candidate_is_hypothesis = True
+                    candidate_is_hypothesis = False
 
         return best_candidate, best_candidate_index, candidate_is_hypothesis
 
-    # Computes the matrix profile with the STOMP method, returning the indices as well.
+    # Computes the matrix profile with the SCRIMP method, returning the indices as well.
+    # Noise correction for the matrix profile has been implemented.
     def get_matrix_profile(self):
         return mp.scrimp_plus_plus(self.sequence, self.subsequence_length, step_size_fraction=0.25, std_noise=self.std_noise, runtime=self.matrix_profile_run_time, exclusion_zone_fraction=1)
 
     # Selects subsequences to be used for the MDS plot.
     def select_subsequences(self):
 
+        # Set thresholds for discretization.
+        self.set_discretization_thresholds()
+
         # Re-initialize sets.
         self.compressible_set = set()
         self.hypothesis_set = set()
-        self.unexplored_set = set(np.arange(self.sequence_length - self.subsequence_length + 1))
+        self.unexplored_set = set(np.arange(self.num_subsequences))
 
         # Compute initial bit cost.
         bit_cost_old = self.bit_cost()
 
-        # Compute matrix profile with indices. Noise correction for the matrix profile has been implemented.
-        self.matrix_profile, self.matrix_profile_indices = self.get_matrix_profile()
+        # Load matrix profile again, if we've already computed.
+        if self.original_matrix_profile is None:
+            self.matrix_profile, self.matrix_profile_indices = self.get_matrix_profile()
+            self.original_matrix_profile = np.copy(self.matrix_profile)
+            self.original_matrix_profile_indices = np.copy(self.matrix_profile_indices)
+        else:
+            self.matrix_profile = self.original_matrix_profile
+            self.matrix_profile_indices = self.original_matrix_profile_indices
 
         while True:
             # Get all the candidate subsequences.
