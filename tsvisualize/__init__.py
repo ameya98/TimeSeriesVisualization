@@ -1,2 +1,2 @@
 name = "tsvisualize"
-from visualization import MDL, TimeSeriesVisualizer
+from visualization import TimeSeriesVisualizer
