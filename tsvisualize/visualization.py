@@ -203,14 +203,13 @@ class TimeSeriesVisualizer:
             # Choose the best according to the MDL criteria.
             candidate, candidate_index, is_hypothesis = self.best_candidate(candidates)
 
+            # Update matrix profile to remove trivial matches.
+            mask_start = max(candidate_index - self.subsequence_length + 1, 0)
+            mask_end = min(candidate_index + self.subsequence_length, self.matrix_profile.size)
+            self.matrix_profile[mask_start: mask_end] = np.inf
+
             # Remove candidate from unexplored.
             self.unexplored_set.remove(candidate_index)
-
-            # Update matrix profile to remove trivial matches.
-            mask_start = max(candidate_index - self.subsequence_length, 0)
-            mask_end = min(candidate_index + self.subsequence_length, self.matrix_profile.size)
-            for index in range(mask_start, mask_end):
-                self.matrix_profile[index] = np.inf
 
             # Depending on the type, add to the right set.
             if is_hypothesis:
@@ -227,12 +226,28 @@ class TimeSeriesVisualizer:
                     bit_cost_old = bit_cost_new
 
         # Return the union of the compressible set and the hypothesis set.
-        return list(self.compressible_set.union(self.hypothesis_set))
+        subsequence_indices = list(self.compressible_set.union(self.hypothesis_set))
+        normalized_subsequences = np.array([self.get_znormalized_subsequence(index) for index in subsequence_indices])
 
-    # Fits the embedding for the MDS, and returns the transformed sequence, along with the subsequence indices!
+        return normalized_subsequences, subsequence_indices
+
+    # Fits the embedding for the visualization method, using the selected Z-normalized subsequences.
+    # Returns the transformed subsequences, along with their actual indices!
     def fit_transform(self):
-        embedding = MDS(n_components=2)
-        subsequence_indices = self.select_subsequences()
-        subsequences = [self.sequence[subsequence_index: subsequence_index + self.subsequence_length] for subsequence_index in subsequence_indices]
-        transformed_sequence = embedding.fit_transform(subsequences)
-        return transformed_sequence, subsequence_indices
+
+        # Choose method and required embedding.
+        if self.visualization_method == 'pca':
+            from sklearn.decomposition import PCA
+            embedding = PCA(n_components=2)
+
+        elif self.visualization_method == 'mds':
+            from sklearn.manifold import TSNE
+            embedding = TSNE(n_components=2)
+
+        elif self.visualization_method == 'mds':
+            from sklearn.manifold import MDS
+            embedding = MDS(n_components=2)
+
+        normalized_subsequences, subsequence_indices = self.select_subsequences()
+        transformed_subsequences = embedding.fit_transform(normalized_subsequences)
+        return transformed_subsequences, subsequence_indices
