@@ -240,7 +240,7 @@ class TimeSeriesVisualizer:
             from sklearn.decomposition import PCA
             embedding = PCA(n_components=2)
 
-        elif self.visualization_method == 'mds':
+        elif self.visualization_method == 'tsne':
             from sklearn.manifold import TSNE
             embedding = TSNE(n_components=2)
 
