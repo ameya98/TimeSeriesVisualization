@@ -184,14 +184,14 @@ class TimeSeriesVisualizer:
 
         # Load matrix profile again, if we've already computed.
         if self.original_matrix_profile is None:
-            self.matrix_profile, self.matrix_profile_indices = self.get_matrix_profile()
-            self.original_matrix_profile = np.copy(self.matrix_profile)
-            self.original_matrix_profile_indices = np.copy(self.matrix_profile_indices)
-        else:
-            self.matrix_profile = self.original_matrix_profile
-            self.matrix_profile_indices = self.original_matrix_profile_indices
+            self.original_matrix_profile, self.original_matrix_profile_indices = self.get_matrix_profile()
+
+        self.matrix_profile = np.copy(self.original_matrix_profile)
+        self.matrix_profile_indices = np.copy(self.original_matrix_profile_indices)
 
         while True:
+            print 'Bit cost = %0.2f' % bit_cost_old
+
             # Get all the candidate subsequences.
             num_candidates = self.candidates_per_round
             candidates = self.get_candidates(num_candidates)
