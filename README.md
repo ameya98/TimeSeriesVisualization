@@ -2,7 +2,7 @@
 Visualization of Time-Series with the Matrix Profile by Salience Subsequence Selection.
 
 <p align="center">
-  <img width="460" height="300" src="/images/tsne_precomputed.png" />
+  <img src="/images/tsne_precomputed.png" />
 </p>
 
 ## Introduction
@@ -65,7 +65,7 @@ plt.title('t-SNE Plot with Expert-Extracted Subsequences')
 plt.show()
 ```
 <p align="center">
-  <img width="460" height="300" src="/images/pca_expert.png" />
+  <img src="/images/pca_expert.png" />
 </p>
 
 The separation between abnormal heartbeats and normal heartbeats is clear! This time-series is 650000 time-steps long, and we've got an effective summary of the kind of data that we have in this time-series.
@@ -89,7 +89,7 @@ plt.title('t-SNE Plot with Randomly Sampled Subsequences')
 plt.show()
 ```
 <p align="center">
-  <img width="460" height="300" src="/images/pca_random.png" />
+  <img src="/images/pca_random.png" />
 </p>
 
 Whoops. This doesn't look anything as useful. The labels are added based on proximity to the actually labelled subsequences. Subsequences which do not have any overlap with any of the labelled subsequences are given no label.
@@ -121,7 +121,7 @@ plt.show()
 ```
 
 <p align="center">
-  <img width="460" height="300" src="/images/pca_actual.png" />
+  <img src="/images/pca_actual.png" />
 </p>
 
 We get a significantly more meaningful plot - the abnormalities are all on the outside. The cluster of normal heartbeats are all homogeneous, except one. Note that the matrix profile can take a long time to compute, so we allow termination of the matrix profile computation after a fixed amount of time (5 minutes in the above example.) to get an approximation of it.
@@ -145,7 +145,7 @@ plt.title('t-SNE Plot with Specifically Selected Subsequences \n (Precomputed Ma
 plt.show()
 ```
 <p align="center">
-  <img width="460" height="300" src="/images/pca_precomputed.png" />
+  <img src="/images/pca_precomputed.png" />
 </p>
 
 This is an even better plot! The abnormal heartbeats are pretty close to each other, barring one. The clusters themselves are pretty homogeneous too.
@@ -173,6 +173,10 @@ It first selects the subsequences and then applies the required dimensionality r
 ```python
 transformed_subsequences, subsequence_indices = tsv.fit_transform()
 ```
+
+## Tips
+* If the number of subsequences selected is too small, try increasing the **discretization_bits** parameter.
+* Increasing the number of candidates per round (via **candidates_per_round**) tends to slow down subsequence selection. However, it might result in better clusters too.
 
 ## References
 [1] **Matrix Profile III: The Matrix Profile Allows Visualization of Salient Subsequences in Massive Time Series**    
